@@ -25,11 +25,8 @@ class RegisterController extends Controller
             ->whereNull('deleted_at')
             ->get();
 
-        // Periksa apakah semua karyawan sudah memiliki hak akses
         $assignedUserIds = $users->pluck('id_karyawan')->toArray();
-        $availableKaryawan = $karyawan->filter(function ($k) use ($assignedUserIds) {
-            return !in_array($k->id, $assignedUserIds);
-        });
+        $availableKaryawan = $karyawan->filter(fn($k) => !in_array($k->id, $assignedUserIds));
 
         return view("user.index", [
             "users" => $users,
@@ -38,25 +35,26 @@ class RegisterController extends Controller
         ]);
     }
 
-
+    /**
+     * Store a newly created resource in storage.
+     */
     public function store(Request $request)
     {
         $data = $request->validate([
-            'id_karyawan' => 'required|unique:App\Models\User',
-            'username' => 'required|unique:App\Models\User',
-            'password' => 'required|min:6',
+            'id_karyawan' => 'required|unique:users,id_karyawan',
+            'username' => 'required|unique:users,username',
+            'password' => 'required|min:6|confirmed',
             'hak_akses' => 'required|in:Admin,Director,General Manager'
         ]);
 
-        $users = new User([
-            'id_karyawan' => $request->id_karyawan,
-            'username' => $request->username,
-            'password' => Hash::make($request->password),
-            'hak_akses' => $request->hak_akses
+        User::create([
+            'id_karyawan' => $data['id_karyawan'],
+            'username' => $data['username'],
+            'password' => Hash::make($data['password']),
+            'hak_akses' => $data['hak_akses']
         ]);
 
-        $users->save();
-        return redirect('users')->with('success', 'Username "' . $users->username . '" berhasil ditambahkan.');
+        return redirect()->route('users.index')->with('success', 'User berhasil ditambahkan.');
     }
 
     /**
@@ -64,18 +62,9 @@ class RegisterController extends Controller
      */
     public function create()
     {
-        // Ambil semua karyawan yang tidak di-soft delete
         $allUsers = DB::table('karyawan')->whereNull('deleted_at')->get();
-
-        // Ambil ID karyawan yang sudah memiliki hak akses
         $assignedUserIds = DB::table('users')->pluck('id_karyawan')->toArray();
-
-        // Filter karyawan yang belum memiliki hak akses
-        $availableUsers = $allUsers->filter(function ($user) use ($assignedUserIds) {
-            return !in_array($user->id, $assignedUserIds);
-        });
-
-        // Cek apakah sudah ada hak akses director
+        $availableUsers = $allUsers->filter(fn($user) => !in_array($user->id, $assignedUserIds));
         $hasDirectorAccess = DB::table('users')->where('hak_akses', 'Director')->exists();
 
         return view('user.register', [
@@ -84,14 +73,13 @@ class RegisterController extends Controller
         ]);
     }
 
-
     /**
      * Show the form for editing the specified resource.
      */
     public function edit(string $id)
     {
-        $users = User::find($id);
-        return view("user.edit", ["users" => $users]);
+        $user = User::findOrFail($id);
+        return view("user.edit", ["user" => $user]);
     }
 
     /**
@@ -99,51 +87,39 @@ class RegisterController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        // Validasi data tanpa 'id_karyawan'
+        $user = User::findOrFail($id);
+
         $data = $request->validate([
-            'username' => 'required',
-            'password' => 'required|min:6',
-            'hak_akses' => 'required'
+            'username' => 'required|unique:users,username,' . $user->id,
+            'password' => 'nullable|min:6|confirmed',
+            'hak_akses' => 'required|in:Admin,Director,General Manager'
         ]);
 
-        // Temukan user berdasarkan ID dan update data
-        $user = User::find($id);
-
-        if ($user) {
-            $user->update($data);
-            return redirect("users")->with("success", 'Username "' . $request->username . '" berhasil diperbarui.');
-        } else {
-            return redirect("users")->with("error", 'User not found.');
+        $user->username = $data['username'];
+        if (!empty($data['password'])) {
+            $user->password = Hash::make($data['password']);
         }
+        $user->hak_akses = $data['hak_akses'];
+        $user->save();
+
+        return redirect()->route('users.index')->with('success', 'User berhasil diperbarui.');
     }
 
     /**
      * Remove the specified resource from storage.
      */
-
     public function destroy($id_karyawan)
     {
-        // Ambil id karyawan dari session pengguna yang sedang login
         $loggedInIdKaryawan = session('id_karyawan');
-
-        // Ambil data user berdasarkan id_karyawan
         $user = User::where('id_karyawan', $id_karyawan)->firstOrFail();
 
-        // Pengecekan apakah pengguna sedang mencoba menghapus data dirinya sendiri
         if ($user->id_karyawan == $loggedInIdKaryawan) {
-            // Hapus data karyawan
             $user->delete();
-
-            // Logout user (hapus session)
-            session()->flush(); // Hapus semua data sesi
-
-            // Redirect ke halaman login dengan pesan sukses
-            return redirect()->route('login')->with('success', 'Username Anda telah dihapus. Silahkan gunakan akun lain.');
+            session()->flush();
+            return redirect()->route('login')->with('success', 'Akun Anda telah dihapus.');
         }
 
-        // Hapus data karyawan
         $user->delete();
-
-        return redirect("users")->with("success", 'Username berhasil dihapus.');
+        return redirect()->route('users.index')->with('success', 'User berhasil dihapus.');
     }
 }

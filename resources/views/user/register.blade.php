@@ -4,6 +4,18 @@
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title fw-semibold mb-4">Tambah Username</h5>
+
+                @if (session('success'))
+                    <div class="alert alert-success">
+                        {{ session('success') }}
+                    </div>
+                @endif
+                @if (session('error'))
+                    <div class="alert alert-danger">
+                        {{ session('error') }}
+                    </div>
+                @endif
+
                 <div class="card">
                     <div class="card-body">
                         <form method="POST" action="{{ route('users.store') }}">
@@ -59,14 +71,14 @@
 
                             <div class="mb-4">
                                 <label for="password" class="form-label">Password</label>
-                                <input type="password" class="form-control" id="password" name="password" required
-                                    value="{{ old('password') }}">
+                                <input type="password" class="form-control" id="password" name="password" required>
                                 @error('password')
                                     <label for="password" class="text-danger">{{ $message }}</label>
                                 @enderror
                             </div>
 
                             <div class="d-flex justify-content-end">
+                                <a href="{{ route('users.index') }}" class="btn btn-secondary me-2">Kembali</a>
                                 <button type="submit" class="btn btn-primary"
                                     {{ $users->isEmpty() ? 'disabled' : '' }}>Submit</button>
                             </div>
